@@ -106,6 +106,46 @@ HANDLERS[("yaml", "json")] = (_yaml_to_json, "data")
 
 That's it — your new pair is now reachable via `convert()` and the CLI.
 
+## Don't want to install anything? Use the hosted API
+
+Same code, behind an HTTPS endpoint at `api.free.ai`. No signup required for the daily free pool (~10K tokens, enough for ~50 image conversions or ~10 PDF→Word).
+
+```bash
+# Convert PDF → DOCX:
+curl -X POST https://api.free.ai/v1/convert/ \
+  -F "file=@resume.pdf" \
+  -F "to_format=docx" \
+  -o resp.json
+
+# resp.json:
+# {
+#   "job_id": "…",
+#   "file_url": "https://api.free.ai/static/outputs/<id>.docx",
+#   "from": "pdf", "to": "docx",
+#   "category": "pdf_to_word", "tokens": 1000
+# }
+```
+
+```bash
+# List every supported pair (no auth required):
+curl https://api.free.ai/v1/convert/list/
+```
+
+```python
+# Python:
+import httpx
+with open("photo.heic", "rb") as f:
+    r = httpx.post(
+        "https://api.free.ai/v1/convert/",
+        files={"file": f},
+        data={"to_format": "jpg"},
+        timeout=60,
+    )
+print(r.json()["file_url"])
+```
+
+For higher limits, sign up at [free.ai](https://free.ai) and pass `X-User-Id: <your-id>` (or use the OpenAI-compatible Bearer-token API key from `/account/?tab=api`). Token cost is the same `cost` field returned by `freeconvert.lookup()` — 200 for an image swap, 1000 for PDF→Word, 1500 for libreoffice reflow.
+
 ## Project layout
 
 ```
