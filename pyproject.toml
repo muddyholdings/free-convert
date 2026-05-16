@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "freeai-convert"
+version = "0.1.0"
+description = "Universal file format converter — one HANDLERS table, ~80 format pairs (image/audio/video/pdf/office/ebook/csv/srt/archive/3d)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "Free.ai", email = "hello@free.ai"}]
+keywords = ["converter", "pdf", "docx", "ffmpeg", "libreoffice", "image", "audio", "video", "ebook", "csv", "srt"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia",
+    "Topic :: Office/Business :: Office Suites",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "click>=8.1",
+]
+
+[project.optional-dependencies]
+# Pure-python format families (no system tools needed):
+image     = ["Pillow>=10"]
+heic      = ["Pillow>=10", "pillow-heif>=0.16"]
+svg       = ["cairosvg>=2.7"]
+pdf       = ["pdfplumber>=0.10", "pdf2docx>=0.5", "python-docx>=1.1", "openpyxl>=3.1", "python-pptx>=0.6", "pdf2image>=1.17"]
+office    = ["openpyxl>=3.1", "python-docx>=1.1", "python-pptx>=0.6", "reportlab>=4"]
+archive   = ["py7zr>=0.20"]
+mesh      = ["trimesh>=4"]
+# Everything pip-installable (still needs ffmpeg / libreoffice / calibre / pandoc
+# from your system package manager for the audio/video/office/ebook handlers):
+all = [
+    "Pillow>=10", "pillow-heif>=0.16", "cairosvg>=2.7",
+    "pdfplumber>=0.10", "pdf2docx>=0.5", "python-docx>=1.1",
+    "openpyxl>=3.1", "python-pptx>=0.6", "pdf2image>=1.17",
+    "reportlab>=4", "py7zr>=0.20", "trimesh>=4",
+]
+dev = ["pytest>=7", "Pillow>=10", "openpyxl>=3.1", "build", "twine"]
+
+[project.urls]
+Homepage = "https://free.ai/convert/"
+Repository = "https://github.com/freeaigit/free-convert"
+Issues = "https://github.com/freeaigit/free-convert/issues"
+Changelog = "https://github.com/freeaigit/free-convert/releases"
+
+[project.scripts]
+freeconvert = "freeconvert.cli:main"
+
+[tool.setuptools]
+packages = ["freeconvert"]
