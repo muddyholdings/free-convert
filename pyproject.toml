@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "freeai-convert"
-version = "0.1.0"
-description = "Universal file format converter — one HANDLERS table, ~80 format pairs (image/audio/video/pdf/office/ebook/csv/srt/archive/3d)."
+version = "0.2.0"
+description = "Universal file format converter — one HANDLERS table, ~600 format pairs (image/audio/video/pdf/office/ebook/csv/srt/archive/3d/data/subtitle)."
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
@@ -44,6 +44,9 @@ pdf       = ["pdfplumber>=0.10", "pdf2docx>=0.5", "python-docx>=1.1", "openpyxl>
 office    = ["openpyxl>=3.1", "python-docx>=1.1", "python-pptx>=0.6", "reportlab>=4"]
 archive   = ["py7zr>=0.20"]
 mesh      = ["trimesh>=4"]
+# Tabular/data conversions (csv↔tsv, json↔xml, json↔yaml, csv↔html, csv↔md,
+# csv↔sql). Added 2026-05-23 along with the subtitle+archive+mesh expansion.
+data      = ["pandas>=2", "PyYAML>=6", "lxml>=4", "tabulate>=0.9"]
 # Everything pip-installable (still needs ffmpeg / libreoffice / calibre / pandoc
 # from your system package manager for the audio/video/office/ebook handlers):
 all = [
@@ -51,6 +54,7 @@ all = [
     "pdfplumber>=0.10", "pdf2docx>=0.5", "python-docx>=1.1",
     "openpyxl>=3.1", "python-pptx>=0.6", "pdf2image>=1.17",
     "reportlab>=4", "py7zr>=0.20", "trimesh>=4",
+    "pandas>=2", "PyYAML>=6", "lxml>=4", "tabulate>=0.9",
 ]
 dev = ["pytest>=7", "Pillow>=10", "openpyxl>=3.1", "build", "twine"]
 

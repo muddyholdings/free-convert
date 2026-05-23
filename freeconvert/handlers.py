@@ -287,6 +287,276 @@ def _json_to_csv(in_path, out_path, src, dst):
                 w.writerow({k: row.get(k, "") for k in keys})
 
 
+# --- Data format expansion (json/xml/yaml/tsv/html/sql/markdown) ------------
+# pandas + yaml + xml stdlib do the heavy lifting; one _read_tabular reader
+# loads any tabular source as a DataFrame, every writer is a thin wrapper.
+
+def _read_tabular(in_path, src):
+    """Load any tabular source (csv/tsv/json/xml/yaml/xlsx/ods/html) as a
+    pandas DataFrame."""
+    import pandas as pd
+    if src == "csv":
+        return pd.read_csv(in_path)
+    if src == "tsv":
+        return pd.read_csv(in_path, sep="\t")
+    if src == "json":
+        try:
+            return pd.read_json(in_path)
+        except ValueError:
+            return pd.read_json(in_path, lines=True)
+    if src == "yaml":
+        import yaml as _yaml
+        with open(in_path, "r", encoding="utf-8", errors="replace") as f:
+            data = _yaml.safe_load(f)
+        if isinstance(data, dict):
+            data = [data]
+        return pd.DataFrame(data)
+    if src == "xml":
+        return pd.read_xml(in_path)
+    if src in ("xlsx", "xls"):
+        return pd.read_excel(in_path)
+    if src == "ods":
+        return pd.read_excel(in_path, engine="odf")
+    if src == "html":
+        tables = pd.read_html(in_path)
+        if not tables:
+            raise RuntimeError("No tables found in HTML")
+        return tables[0]
+    raise RuntimeError(f"unsupported data source: {src}")
+
+
+def _csv_to_tsv(in_path, out_path, src, dst):
+    _read_tabular(in_path, "csv").to_csv(out_path, sep="\t", index=False)
+def _tsv_to_csv(in_path, out_path, src, dst):
+    _read_tabular(in_path, "tsv").to_csv(out_path, index=False)
+def _tsv_to_json(in_path, out_path, src, dst):
+    _read_tabular(in_path, "tsv").to_json(out_path, orient="records", indent=2)
+def _json_to_tsv(in_path, out_path, src, dst):
+    _read_tabular(in_path, "json").to_csv(out_path, sep="\t", index=False)
+def _json_to_xml(in_path, out_path, src, dst):
+    _read_tabular(in_path, "json").to_xml(out_path, index=False)
+def _xml_to_json(in_path, out_path, src, dst):
+    _read_tabular(in_path, "xml").to_json(out_path, orient="records", indent=2)
+def _xml_to_csv(in_path, out_path, src, dst):
+    _read_tabular(in_path, "xml").to_csv(out_path, index=False)
+def _csv_to_xml(in_path, out_path, src, dst):
+    _read_tabular(in_path, "csv").to_xml(out_path, index=False)
+
+
+def _json_to_yaml(in_path, out_path, src, dst):
+    import yaml as _yaml
+    with open(in_path, "r", encoding="utf-8", errors="replace") as f:
+        data = json.load(f)
+    with open(out_path, "w", encoding="utf-8") as f:
+        _yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+
+
+def _yaml_to_json(in_path, out_path, src, dst):
+    import yaml as _yaml
+    with open(in_path, "r", encoding="utf-8", errors="replace") as f:
+        data = _yaml.safe_load(f)
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def _yaml_to_csv(in_path, out_path, src, dst):
+    _read_tabular(in_path, "yaml").to_csv(out_path, index=False)
+
+
+def _csv_to_yaml(in_path, out_path, src, dst):
+    import yaml as _yaml
+    df = _read_tabular(in_path, "csv")
+    with open(out_path, "w", encoding="utf-8") as f:
+        _yaml.safe_dump(df.to_dict(orient="records"), f, allow_unicode=True, sort_keys=False)
+
+
+def _csv_to_html(in_path, out_path, src, dst):
+    _read_tabular(in_path, "csv").to_html(out_path, index=False)
+
+
+def _csv_to_markdown(in_path, out_path, src, dst):
+    md = _read_tabular(in_path, "csv").to_markdown(index=False) or ""
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(md)
+
+
+def _json_to_markdown(in_path, out_path, src, dst):
+    md = _read_tabular(in_path, "json").to_markdown(index=False) or ""
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(md)
+
+
+def _csv_to_sql(in_path, out_path, src, dst):
+    """CREATE TABLE + INSERT statements. TEXT-typed for portability across
+    SQLite / Postgres / MySQL."""
+    df = _read_tabular(in_path, "csv")
+    table = os.path.splitext(os.path.basename(in_path))[0].replace("-", "_").replace(" ", "_") or "data"
+    cols = ", ".join(f'"{c}" TEXT' for c in df.columns)
+    lines = [f'CREATE TABLE "{table}" ({cols});']
+    for _, row in df.iterrows():
+        vals = ", ".join("'" + str(v).replace("'", "''") + "'" for v in row.values)
+        lines.append(f'INSERT INTO "{table}" VALUES ({vals});')
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+
+# --- Subtitle format expansion (ass / sbv via SRT-cue pivot) ----------------
+
+def _parse_srt_full(in_path):
+    import re as _re
+    with open(in_path, "r", encoding="utf-8", errors="replace") as f:
+        body = f.read()
+    cues = []
+    for block in _re.split(r"\n\s*\n", body.strip()):
+        lines = [ln for ln in block.splitlines() if ln.strip()]
+        ts_idx = next((i for i, ln in enumerate(lines) if "-->" in ln), None)
+        if ts_idx is None:
+            continue
+        text = "\n".join(lines[ts_idx + 1:])
+        m = _re.match(r"(\d+):(\d+):(\d+)[,.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,.](\d+)", lines[ts_idx])
+        if not m: continue
+        s = int(m.group(1))*3600 + int(m.group(2))*60 + int(m.group(3)) + int(m.group(4))/1000
+        e = int(m.group(5))*3600 + int(m.group(6))*60 + int(m.group(7)) + int(m.group(8))/1000
+        cues.append((s, e, text))
+    return cues
+
+
+def _parse_vtt_full(in_path):
+    import re as _re
+    with open(in_path, "r", encoding="utf-8", errors="replace") as f:
+        body = f.read()
+    body = _re.sub(r"^WEBVTT.*?\n\n", "", body, flags=_re.S)
+    cues = []
+    for block in _re.split(r"\n\s*\n", body.strip()):
+        lines = [ln for ln in block.splitlines() if ln.strip()]
+        ts_idx = next((i for i, ln in enumerate(lines) if "-->" in ln), None)
+        if ts_idx is None: continue
+        text = "\n".join(lines[ts_idx + 1:])
+        m = _re.search(r"(\d+):(\d+)[:.](\d+)\.(\d+)\s*-->\s*(\d+):(\d+)[:.](\d+)\.(\d+)", lines[ts_idx])
+        if not m: continue
+        s = int(m.group(1))*3600 + int(m.group(2))*60 + int(m.group(3)) + int(m.group(4))/1000
+        e = int(m.group(5))*3600 + int(m.group(6))*60 + int(m.group(7)) + int(m.group(8))/1000
+        cues.append((s, e, text))
+    return cues
+
+
+def _parse_ass(in_path):
+    import re as _re
+    with open(in_path, "r", encoding="utf-8", errors="replace") as f:
+        body = f.read()
+    cues = []
+    in_events = False
+    fmt_keys = []
+    for ln in body.splitlines():
+        s = ln.strip()
+        if s.lower().startswith("[events]"):
+            in_events = True; continue
+        if in_events and s.lower().startswith("format:"):
+            fmt_keys = [k.strip().lower() for k in s.split(":", 1)[1].split(",")]; continue
+        if in_events and s.lower().startswith("dialogue:"):
+            parts = s.split(":", 1)[1].split(",", len(fmt_keys) - 1)
+            if len(parts) < len(fmt_keys): continue
+            d = dict(zip(fmt_keys, parts))
+            try:
+                start = _ass_ts_to_sec(d.get("start", "0:00:00.00"))
+                end = _ass_ts_to_sec(d.get("end", "0:00:00.00"))
+            except Exception:
+                continue
+            text = d.get("text", "").replace(r"\N", "\n").replace(r"\n", "\n")
+            text = _re.sub(r"\{[^}]*\}", "", text)
+            cues.append((start, end, text))
+    return cues
+
+
+def _ass_ts_to_sec(ts):
+    h, m, rest = ts.split(":", 2)
+    s, cs = (rest.split(".", 1) + ["0"])[:2]
+    return int(h)*3600 + int(m)*60 + int(s) + int(cs)/100
+
+
+def _parse_sbv(in_path):
+    import re as _re
+    with open(in_path, "r", encoding="utf-8", errors="replace") as f:
+        body = f.read()
+    cues = []
+    for block in _re.split(r"\n\s*\n", body.strip()):
+        lines = [ln for ln in block.splitlines() if ln.strip()]
+        if not lines or "," not in lines[0]: continue
+        m = _re.match(r"(\d+):(\d+):(\d+)\.(\d+),(\d+):(\d+):(\d+)\.(\d+)", lines[0])
+        if not m: continue
+        s = int(m.group(1))*3600 + int(m.group(2))*60 + int(m.group(3)) + int(m.group(4))/1000
+        e = int(m.group(5))*3600 + int(m.group(6))*60 + int(m.group(7)) + int(m.group(8))/1000
+        cues.append((s, e, "\n".join(lines[1:])))
+    return cues
+
+
+def _fmt_srt_ts(seconds):
+    h = int(seconds // 3600); m = int((seconds % 3600) // 60); s = int(seconds % 60)
+    ms = int(round((seconds - int(seconds)) * 1000))
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def _fmt_vtt_ts(seconds):
+    return _fmt_srt_ts(seconds).replace(",", ".")
+
+
+def _fmt_ass_ts(seconds):
+    h = int(seconds // 3600); m = int((seconds % 3600) // 60); s = int(seconds % 60)
+    cs = int(round((seconds - int(seconds)) * 100))
+    return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
+
+
+def _write_srt(cues, out_path):
+    with open(out_path, "w", encoding="utf-8") as f:
+        for i, (s, e, t) in enumerate(cues, 1):
+            f.write(f"{i}\n{_fmt_srt_ts(s)} --> {_fmt_srt_ts(e)}\n{t}\n\n")
+
+
+def _write_vtt(cues, out_path):
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("WEBVTT\n\n")
+        for s, e, t in cues:
+            f.write(f"{_fmt_vtt_ts(s)} --> {_fmt_vtt_ts(e)}\n{t}\n\n")
+
+
+def _write_ass(cues, out_path):
+    head = (
+        "[Script Info]\nScriptType: v4.00+\nCollisions: Normal\n\n"
+        "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        "Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,1,1,2,10,10,10,1\n\n"
+        "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+    )
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(head)
+        for s, e, t in cues:
+            t_ass = t.replace("\n", r"\N")
+            f.write(f"Dialogue: 0,{_fmt_ass_ts(s)},{_fmt_ass_ts(e)},Default,,0,0,0,,{t_ass}\n")
+
+
+def _write_sbv(cues, out_path):
+    with open(out_path, "w", encoding="utf-8") as f:
+        for s, e, t in cues:
+            f.write(f"{_fmt_vtt_ts(s)},{_fmt_vtt_ts(e)}\n{t}\n\n")
+
+
+def _write_txt_cues(cues, out_path):
+    with open(out_path, "w", encoding="utf-8") as f:
+        for _, _, t in cues:
+            f.write(t.strip() + "\n")
+
+
+def _ass_to_srt(in_path, out_path, src, dst):  _write_srt(_parse_ass(in_path), out_path)
+def _ass_to_vtt(in_path, out_path, src, dst):  _write_vtt(_parse_ass(in_path), out_path)
+def _ass_to_txt(in_path, out_path, src, dst):  _write_txt_cues(_parse_ass(in_path), out_path)
+def _srt_to_ass(in_path, out_path, src, dst):  _write_ass(_parse_srt_full(in_path), out_path)
+def _vtt_to_ass(in_path, out_path, src, dst):  _write_ass(_parse_vtt_full(in_path), out_path)
+def _vtt_to_txt(in_path, out_path, src, dst):  _write_txt_cues(_parse_vtt_full(in_path), out_path)
+def _sbv_to_srt(in_path, out_path, src, dst):  _write_srt(_parse_sbv(in_path), out_path)
+def _sbv_to_vtt(in_path, out_path, src, dst):  _write_vtt(_parse_sbv(in_path), out_path)
+def _srt_to_sbv(in_path, out_path, src, dst):  _write_sbv(_parse_srt_full(in_path), out_path)
+def _vtt_to_sbv(in_path, out_path, src, dst):  _write_sbv(_parse_vtt_full(in_path), out_path)
+
+
 # --- PDF → {word, excel, pptx, text, image} ---------------------------------
 def _pdf_to_text(in_path, out_path, src, dst):
     import pdfplumber
@@ -522,15 +792,17 @@ def _pandoc_convert(in_path, out_path, src, dst):
 # --- Archives (stdlib zipfile/tarfile + py7zr) ------------------------------
 def _archive_convert(in_path, out_path, src, dst):
     """Re-package archive contents from src format to dst format. Supports
-    zip ↔ tar ↔ tar.gz ↔ 7z. Files are extracted to a tempdir then re-packed."""
+    zip ↔ tar / tar.gz / tgz / tar.bz2 / bz2 / xz / 7z. Files are extracted
+    to a tempdir then re-packed via the dst format's writer."""
     import zipfile, tarfile
     workdir = tempfile.mkdtemp(prefix="arch_")
     try:
         if src == "zip":
             with zipfile.ZipFile(in_path) as z:
                 z.extractall(workdir)
-        elif src in ("tar", "tar.gz", "tgz", "tar.bz2", "tbz"):
-            with tarfile.open(in_path) as t:
+        elif src in ("tar", "tar.gz", "tgz", "tar.bz2", "tbz", "tar.xz", "txz", "gz", "bz2", "xz"):
+            # tarfile.open(..., "r:*") auto-detects compression for every variant
+            with tarfile.open(in_path, "r:*") as t:
                 t.extractall(workdir)
         elif src == "7z":
             import py7zr
@@ -546,9 +818,10 @@ def _archive_convert(in_path, out_path, src, dst):
                         full = os.path.join(root, fn)
                         rel = os.path.relpath(full, workdir)
                         z.write(full, rel)
-        elif dst in ("tar", "tar.gz", "tgz"):
-            mode = "w:gz" if dst != "tar" else "w"
-            with tarfile.open(out_path, mode) as t:
+        elif dst in ("tar", "tar.gz", "tgz", "gz", "bz2", "xz"):
+            mode_map = {"tar": "w", "tar.gz": "w:gz", "tgz": "w:gz",
+                        "gz": "w:gz", "bz2": "w:bz2", "xz": "w:xz"}
+            with tarfile.open(out_path, mode_map[dst]) as t:
                 t.add(workdir, arcname=".")
         elif dst == "7z":
             import py7zr
@@ -721,15 +994,50 @@ HANDLERS[("pdf", "mobi")] = (_ebook_convert, "ebook")
 HANDLERS[("pdf", "azw3")] = (_ebook_convert, "ebook")
 HANDLERS[("pdf", "fb2")] = (_ebook_convert, "ebook")
 
-# Archives
-_ARCHIVE_FMTS = {"zip", "tar", "tar.gz", "tgz", "7z"}
+# Data (json/xml/yaml/tsv/html/markdown/sql) — pandas + yaml + xml stdlib
+HANDLERS[("csv", "tsv")] = (_csv_to_tsv, "data")
+HANDLERS[("tsv", "csv")] = (_tsv_to_csv, "data")
+HANDLERS[("tsv", "json")] = (_tsv_to_json, "data")
+HANDLERS[("json", "tsv")] = (_json_to_tsv, "data")
+HANDLERS[("json", "xml")] = (_json_to_xml, "data")
+HANDLERS[("xml", "json")] = (_xml_to_json, "data")
+HANDLERS[("xml", "csv")] = (_xml_to_csv, "data")
+HANDLERS[("csv", "xml")] = (_csv_to_xml, "data")
+HANDLERS[("json", "yaml")] = (_json_to_yaml, "data")
+HANDLERS[("yaml", "json")] = (_yaml_to_json, "data")
+HANDLERS[("json", "yml")] = (_json_to_yaml, "data")
+HANDLERS[("yml", "json")] = (_yaml_to_json, "data")
+HANDLERS[("yaml", "csv")] = (_yaml_to_csv, "data")
+HANDLERS[("csv", "yaml")] = (_csv_to_yaml, "data")
+HANDLERS[("csv", "html")] = (_csv_to_html, "data")
+HANDLERS[("csv", "md")] = (_csv_to_markdown, "data")
+HANDLERS[("json", "md")] = (_json_to_markdown, "data")
+HANDLERS[("csv", "sql")] = (_csv_to_sql, "data")
+
+# Subtitle expansion (ass + sbv via SRT-cue pivot)
+HANDLERS[("ass", "srt")] = (_ass_to_srt, "subtitle")
+HANDLERS[("ass", "vtt")] = (_ass_to_vtt, "subtitle")
+HANDLERS[("ass", "txt")] = (_ass_to_txt, "subtitle")
+HANDLERS[("srt", "ass")] = (_srt_to_ass, "subtitle")
+HANDLERS[("vtt", "ass")] = (_vtt_to_ass, "subtitle")
+HANDLERS[("vtt", "txt")] = (_vtt_to_txt, "subtitle")
+HANDLERS[("sbv", "srt")] = (_sbv_to_srt, "subtitle")
+HANDLERS[("sbv", "vtt")] = (_sbv_to_vtt, "subtitle")
+HANDLERS[("srt", "sbv")] = (_srt_to_sbv, "subtitle")
+HANDLERS[("vtt", "sbv")] = (_vtt_to_sbv, "subtitle")
+
+# Archives — expanded to cover tar.gz/.bz2/.xz + bare gz/bz2/xz aliases
+# (was just zip/tar/tar.gz/tgz/7z). _archive_convert handles all of them.
+_ARCHIVE_FMTS = {"zip", "tar", "tar.gz", "tgz", "gz", "bz2", "xz", "7z"}
 for _src in _ARCHIVE_FMTS:
     for _dst in _ARCHIVE_FMTS:
         if _src != _dst:
             HANDLERS[(_src, _dst)] = (_archive_convert, "archive")
 
-# 3D meshes
-_MESH_FMTS = {"obj", "stl", "ply", "glb", "gltf"}
+# 3D meshes — expanded to include 3mf, dae, off (trimesh handles them
+# natively). FBX + USDZ intentionally skipped (closed-source SDK / heavy
+# dep respectively).
+_MESH_FMTS = {"obj", "stl", "ply", "glb", "gltf", "3mf", "dae", "off"}
 for _src in _MESH_FMTS:
     for _dst in _MESH_FMTS:
         if _src != _dst:
