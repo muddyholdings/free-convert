@@ -162,7 +162,7 @@ MIT — see [LICENSE](LICENSE).
 
 ## Related
 
-- [free-scene](https://github.com/freeaigit/free-scene) — multi-scene AI movie maker
-- [free-code](https://github.com/freeaigit/free-code) — agentic coding CLI
-- [free-sdk](https://github.com/freeaigit/free-sdk) — Python SDK for the Free.ai API
+- [free-scene](https://github.com/muddyholdings/free-scene) — multi-scene AI movie maker
+- [free-code](https://github.com/muddyholdings/free-code) — agentic coding CLI
+- [free-sdk](https://github.com/muddyholdings/free-sdk) — Python SDK for the Free.ai API
 - [free.ai](https://free.ai) — 400+ AI tools, the home of this codebase

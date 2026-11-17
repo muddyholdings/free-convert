@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "freeai-convert"
-version = "0.2.0"
+version = "0.2.1"
 description = "Universal file format converter — one HANDLERS table, ~600 format pairs (image/audio/video/pdf/office/ebook/csv/srt/archive/3d/data/subtitle)."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -60,9 +60,9 @@ dev = ["pytest>=7", "Pillow>=10", "openpyxl>=3.1", "build", "twine"]
 
 [project.urls]
 Homepage = "https://free.ai/convert/"
-Repository = "https://github.com/freeaigit/free-convert"
-Issues = "https://github.com/freeaigit/free-convert/issues"
-Changelog = "https://github.com/freeaigit/free-convert/releases"
+Repository = "https://github.com/muddyholdings/free-convert"
+Issues = "https://github.com/muddyholdings/free-convert/issues"
+Changelog = "https://github.com/muddyholdings/free-convert/releases"
 
 [project.scripts]
 freeconvert = "freeconvert.cli:main"
